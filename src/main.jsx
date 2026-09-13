@@ -7,13 +7,61 @@ import './styles.css';
 
 const KEY='the-boss-mpg-v1';
 const CLOUD_FILE='the-boss-mpg-data.json';
-const msal=import.meta.env.VITE_MICROSOFT_CLIENT_ID?new PublicClientApplication({auth:{clientId:import.meta.env.VITE_MICROSOFT_CLIENT_ID,authority:'https://login.microsoftonline.com/common',redirectUri:window.location.origin}}):null;
-const loginRequest={scopes:['Files.ReadWrite']};
+const microsoftClientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID;
+
+const productionRedirectUri =
+  "https://the-boss-mpg-tracker.vercel.app/auth.html";
+
+const localRedirectUri =
+  "http://localhost:5173/auth.html";
+
+const redirectUri = window.location.hostname === "localhost"
+  ? localRedirectUri
+  : productionRedirectUri;
+
+const msal = microsoftClientId
+  ? new PublicClientApplication({
+      auth: {
+        clientId: microsoftClientId,
+        authority: "https://login.microsoftonline.com/common",
+        redirectUri,
+        postLogoutRedirectUri:
+          "https://the-boss-mpg-tracker.vercel.app"
+      },
+      cache: {
+        cacheLocation: "localStorage",
+        storeAuthStateInCookie: false
+      }
+    })
+  : null;
+
+const loginRequest = {
+  scopes: ["User.Read", "Files.ReadWrite"],
+  redirectUri,
+  prompt: "select_account"
+};
 const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 const num=(n,d=2)=>Number.isFinite(n)?n.toFixed(d):'—';
 const uid=()=>`${Date.now()}-${Math.random().toString(16).slice(2)}`;
 function initial(){try{const x=JSON.parse(localStorage.getItem(KEY)); if(x?.fuel&&x?.def)return x;}catch{} return seedData;}
-async function graphToken(account){const result=await msal.acquireTokenSilent({...loginRequest,account}).catch(()=>msal.acquireTokenPopup(loginRequest));return result.accessToken;}
+async function graphToken(account) {
+  try {
+    const result = await msal.acquireTokenSilent({
+      scopes: ["User.Read", "Files.ReadWrite"],
+      account
+    });
+
+    return result.accessToken;
+  } catch (error) {
+    const result = await msal.acquireTokenPopup({
+      scopes: ["User.Read", "Files.ReadWrite"],
+      account,
+      redirectUri
+    });
+
+    return result.accessToken;
+  }
+}
 async function cloudRequest(account,method='GET',body){const token=await graphToken(account);const response=await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${CLOUD_FILE}:/content`,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});if(!response.ok)throw Error(response.status===404?'missing':'request');return response.status===204?null:response.json();}
 function calc(rows){return [...rows].sort((a,b)=>a.date.localeCompare(b.date)).map((r,i,all)=>{const prev=all[i-1];const distance=Number(r.distance)||((prev&&r.odometer>prev.odometer)?r.odometer-prev.odometer:0);return {...r,distance,efficiency:r.gallons?distance/r.gallons:0,unitCost:r.gallons?r.cost/r.gallons:0,costMile:distance?r.cost/distance:0};});}
 function Summary({rows,type}){const totalMiles=rows.reduce((s,r)=>s+r.distance,0), gallons=rows.reduce((s,r)=>s+r.gallons,0), cost=rows.reduce((s,r)=>s+r.cost,0), valid=rows.filter(r=>r.efficiency>0), average=valid.length?valid.reduce((s,r)=>s+r.efficiency,0)/valid.length:0, best=valid.length?Math.max(...valid.map(r=>r.efficiency)):0, worst=valid.length?Math.min(...valid.map(r=>r.efficiency)):0;return <div className={`cards ${type==='fuel'?'dashboard':''}`}>{type==='fuel'?<><article><span>Average MPG</span><b>{num(average)}</b></article><article><span>Best MPG</span><b>{num(best)}</b></article><article><span>Worst MPG</span><b>{num(worst)}</b></article><article><span>Fuel spend</span><b>{money.format(cost)}</b></article></>:<><article><span>Total miles</span><b>{num(totalMiles,0)}</b></article><article><span>Miles / DEF gal</span><b>{num(gallons?totalMiles/gallons:0)}</b></article><article><span>Total gallons</span><b>{num(gallons,2)}</b></article><article><span>Total cost</span><b>{money.format(cost)}</b></article></>}</div>}
@@ -25,7 +73,17 @@ function App(){
  const rows=useMemo(()=>calc(data[tab]),[data,tab]);
  useEffect(()=>{if(!msal)return;let active=true;(async()=>{try{await msal.initialize();const cached=msal.getAllAccounts()[0];if(!cached)return;setAccount(cached);const remote=await cloudRequest(cached);if(active&&remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');}}catch{if(active)setSyncStatus('OneDrive sync unavailable');}})();return()=>{active=false};},[]);
  const save=n=>{setData(n);localStorage.setItem(KEY,JSON.stringify(n));if(account){setSyncStatus('Saving to OneDrive…');cloudRequest(account,'PUT',n).then(()=>setSyncStatus('Synced to OneDrive')).catch(()=>setSyncStatus('Saved locally; OneDrive sync failed'));}};
- const connectOneDrive=async()=>{if(!msal)return;try{setSyncStatus('Signing in…');await msal.initialize();const result=await msal.loginPopup(loginRequest);const signedIn=result.account;setAccount(signedIn);try{const remote=await cloudRequest(signedIn);if(remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');return;}}catch(error){if(error.message!=='missing')throw error;}await cloudRequest(signedIn,'PUT',data);setSyncStatus('Backed up to OneDrive');}catch{setSyncStatus('OneDrive connection failed');}};
+ const connectOneDrive=async()=>{if(!msal)return;try{setSyncStatus('Signing in…');await msal.initialize();const result=await msal.loginPopup(loginRequest);const signedIn=result.account;setAccount(signedIn);try{const remote=await cloudRequest(signedIn);if(remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');return;}}catch(error){if(error.message!=='missing')throw error;}await cloudRequest(signedIn,'PUT',data);setSyncStatus('Backed up to OneDrive');} catch (error) {
+  console.error("OneDrive connection error:", error);
+
+  setSyncStatus(
+    `OneDrive failed: ${
+      error?.errorCode ||
+      error?.message ||
+      "Unknown error"
+    }`
+  );
+}};
  const add=e=>{e.preventDefault();const odometer=+form.odometer,gallons=+form.gallons,cost=+form.cost;if(!form.date||odometer<=0||gallons<=0||cost<0)return setMsg('Enter a valid date, odometer, gallons, and cost.');const prev=rows.at(-1);const distance=prev&&odometer>prev.odometer?odometer-prev.odometer:0;save({...data,[tab]:[...data[tab],{id:uid(),type:tab,date:form.date,odometer,gallons,cost,distance}]});setForm(f=>({...f,odometer:'',gallons:'',cost:''}));setMsg(distance?'Entry saved.':'Entry saved. Add a later odometer reading to calculate distance.');};
  const remove=id=>save({...data,[tab]:data[tab].filter(x=>x.id!==id)});
  const exportFile=()=>{const wb=XLSX.utils.book_new();for(const t of ['fuel','def']){const out=calc(data[t]).map(r=>({Type:t==='fuel'?'Diesel':'DEF',Date:r.date,Odometer:r.odometer,'Miles since prior fill':r.distance,Gallons:r.gallons,Cost:r.cost,'Cost/Gallon':r.unitCost,'Miles/Gallon':r.efficiency,'Cost/Mile':r.costMile}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(out),t==='fuel'?'Diesel':'DEF');}XLSX.writeFile(wb,'The-Boss-MPG-Backup.xlsx');};
