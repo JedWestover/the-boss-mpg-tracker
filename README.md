@@ -30,4 +30,14 @@ Import the GitHub repository in Vercel. It will detect Vite automatically. Build
 - DEF efficiency is shown as miles per DEF gallon.
 - Import accepts this workbook layout or a simple sheet with Date, Odometer, Gallons, Cost, and Type columns.
 - Export downloads a backup workbook.
-- Browser storage is device-specific. Add a hosted database later if you want syncing between devices.
+- Browser storage is device-specific until OneDrive sync is connected.
+
+## OneDrive sync
+
+1. Register a single-page application in Microsoft Entra admin center.
+2. Add the deployed app URL as a SPA redirect URI, for example `https://your-app.vercel.app`.
+3. Grant Microsoft Graph delegated permission `Files.ReadWrite`.
+4. Copy `.env.example` to `.env.local` and set `VITE_MICROSOFT_CLIENT_ID` to the application client ID.
+5. Add the same `VITE_MICROSOFT_CLIENT_ID` as a Vercel environment variable and redeploy.
+
+Use **Connect OneDrive** in the app to sign in. The tracker stores its backup as `the-boss-mpg-data.json` in the signed-in user's OneDrive root. Existing cloud data is loaded on sign-in; later saves sync automatically.
