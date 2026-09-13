@@ -43,7 +43,10 @@ const loginRequest = {
 const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 const num=(n,d=2)=>Number.isFinite(n)?n.toFixed(d):'—';
 const uid=()=>`${Date.now()}-${Math.random().toString(16).slice(2)}`;
-function initial(){try{const x=JSON.parse(localStorage.getItem(KEY)); if(x?.fuel&&x?.def)return x;}catch{} return seedData;}
+function initial(){try{const x=JSON.parse(localStorage.getItem(KEY)); if(x?.fuel&&x?.def)return x;}catch{} return {
+  fuel: [],
+  def: []
+};}
 async function graphToken(account) {
   try {
     const result = await msal.acquireTokenSilent({
