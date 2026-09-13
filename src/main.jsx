@@ -76,7 +76,25 @@ function App(){
  const rows=useMemo(()=>calc(data[tab]),[data,tab]);
  useEffect(()=>{if(!msal)return;let active=true;(async()=>{try{await msal.initialize();const cached=msal.getAllAccounts()[0];if(!cached)return;setAccount(cached);const remote=await cloudRequest(cached);if(active&&remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');}}catch{if(active)setSyncStatus('OneDrive sync unavailable');}})();return()=>{active=false};},[]);
  const save=n=>{setData(n);localStorage.setItem(KEY,JSON.stringify(n));if(account){setSyncStatus('Saving to OneDrive…');cloudRequest(account,'PUT',n).then(()=>setSyncStatus('Synced to OneDrive')).catch(()=>setSyncStatus('Saved locally; OneDrive sync failed'));}};
- const connectOneDrive=async()=>{if(!msal)return;try{setSyncStatus('Signing in…');await msal.initialize();const result=await msal.loginPopup(loginRequest);const signedIn=result.account;setAccount(signedIn);try{const remote=await cloudRequest(signedIn);if(remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');return;}}catch(error){if(error.message!=='missing')throw error;}await cloudRequest(signedIn,'PUT',data);setSyncStatus('Backed up to OneDrive');} catch (error) {
+ const connectOneDrive=async()=>{if(!msal)return;try{setSyncStatus('Signing in…');await msal.initialize();const result=await msal.loginPopup(loginRequest);const signedIn=result.account;setAccount(signedIn);try{const remote=await cloudRequest(signedIn);if(remote?.fuel&&remote?.def){setData(remote);localStorage.setItem(KEY,JSON.stringify(remote));setSyncStatus('Synced from OneDrive');return;}}catch(error){
+  if(error.message !== 'missing'){
+    throw error;
+  }
+
+  const emptyData = {
+    fuel: [],
+    def: []
+  };
+
+  await cloudRequest(signedIn, 'PUT', emptyData);
+
+  setData(emptyData);
+  localStorage.setItem(KEY, JSON.stringify(emptyData));
+
+  setSyncStatus('Created new OneDrive profile');
+
+  return;
+}} catch (error) {
   console.error("OneDrive connection error:", error);
 
   setSyncStatus(
