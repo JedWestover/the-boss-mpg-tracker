@@ -45,6 +45,12 @@ const money = new Intl.NumberFormat("en-US", {
 });
 const num = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : "—");
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const localDate = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+};
 function initial() {
   try {
     const x = JSON.parse(localStorage.getItem(KEY));
@@ -427,7 +433,7 @@ function App() {
     msal ? "OneDrive not connected" : "Local storage only",
   );
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: localDate(),
     odometer: "",
     gallons: "",
     cost: "",
