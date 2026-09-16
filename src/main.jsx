@@ -343,7 +343,7 @@ function TrendChart({ rows, title, field, color, format }) {
             <g pointerEvents="none">
               <rect
                 x={Math.max(pad.left, Math.min(width - pad.right - 122, hover.x - 61))}
-                y={Math.max(pad.top, hover.y - 31)}
+                y={Math.max(pad.top, hover.y - 55)}
                 width="122"
                 height="22"
                 rx="4"
@@ -353,7 +353,7 @@ function TrendChart({ rows, title, field, color, format }) {
               <text
                 className="chartLabel"
                 x={Math.max(pad.left + 61, Math.min(width - pad.right - 61, hover.x))}
-                y={Math.max(pad.top + 15, hover.y - 16)}
+                y={Math.max(pad.top + 15, hover.y - 40)}
                 textAnchor="middle"
               >
                 {`${hover.date}: ${format(hover.value)}`}
