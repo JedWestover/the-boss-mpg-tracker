@@ -420,7 +420,7 @@ function App() {
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState("fuel");
   const [msg, setMsg] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [account, setAccount] = useState(null);
   const [syncStatus, setSyncStatus] = useState(
     msal ? "OneDrive not connected" : "Local storage only",
