@@ -380,14 +380,14 @@ function CostCalculator({ fuelRows, defRows, onBack }) {
   return (
     <>
       <section className="panel calculator">
-        <div className="sectionHead">
+        <div className="sectionHead calculatorHead">
+          <button className="button secondary" type="button" onClick={onBack}>
+            Back to tracker
+          </button>
           <div>
             <h2>Calculate cost</h2>
             <p>Project a trip using the latest fuel and DEF cost per mile.</p>
           </div>
-          <button className="button secondary" type="button" onClick={onBack}>
-            Back to tracker
-          </button>
         </div>
         <label>
           Trip miles
