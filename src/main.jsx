@@ -113,10 +113,14 @@ function calc(rows) {
       };
     });
 }
+function currentCostPerMile(rows) {
+  return [...rows].reverse().find((row) => row.costMile > 0)?.costMile || 0;
+}
 function Summary({ rows, type }) {
   const totalMiles = rows.reduce((s, r) => s + r.distance, 0),
     gallons = rows.reduce((s, r) => s + r.gallons, 0),
     cost = rows.reduce((s, r) => s + r.cost, 0),
+      costPerMile = totalMiles ? cost / totalMiles : 0,
     valid = rows.filter((r) => r.efficiency > 0),
     average = valid.length
       ? valid.reduce((s, r) => s + r.efficiency, 0) / valid.length
@@ -143,6 +147,10 @@ function Summary({ rows, type }) {
             <span>Fuel spend</span>
             <b>{money.format(cost)}</b>
           </article>
+            <article>
+              <span>Cost per mile</span>
+              <b>{money.format(costPerMile)}</b>
+            </article>
         </>
       ) : (
         <>
@@ -161,6 +169,10 @@ function Summary({ rows, type }) {
           <article>
             <span>Total cost</span>
             <b>{money.format(cost)}</b>
+          </article>
+          <article>
+            <span>Cost per mile</span>
+            <b>{money.format(costPerMile)}</b>
           </article>
         </>
       )}
@@ -423,9 +435,54 @@ function Trends({ rows, type }) {
     </section>
   );
 }
+function CostCalculator({ fuelRows, defRows, onBack }) {
+  const [miles, setMiles] = useState("");
+  const tripMiles = Number(miles) || 0;
+  const fuelCostPerMile = currentCostPerMile(fuelRows);
+  const defCostPerMile = currentCostPerMile(defRows);
+  const fuelCost = tripMiles * fuelCostPerMile;
+  const combinedCost = tripMiles * (fuelCostPerMile + defCostPerMile);
+
+  return (
+    <>
+      <section className="panel calculator">
+        <div className="sectionHead">
+          <div>
+            <h2>Calculate cost</h2>
+            <p>Project a trip using the latest fuel and DEF cost per mile.</p>
+          </div>
+          <button className="button secondary" type="button" onClick={onBack}>
+            Back to tracker
+          </button>
+        </div>
+        <label>
+          Trip miles
+          <input
+            inputMode="decimal"
+            min="0"
+            placeholder="Enter trip distance"
+            value={miles}
+            onChange={(e) => setMiles(e.target.value)}
+          />
+        </label>
+      </section>
+      <div className="cards calculatorResults">
+        <article>
+          <span>Fuel only</span>
+          <b>{money.format(fuelCost)}</b>
+        </article>
+        <article>
+          <span>Fuel + DEF</span>
+          <b>{money.format(combinedCost)}</b>
+        </article>
+      </div>
+    </>
+  );
+}
 function App() {
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState("fuel");
+  const [screen, setScreen] = useState("tracker");
   const [msg, setMsg] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [account, setAccount] = useState(null);
@@ -439,6 +496,8 @@ function App() {
     cost: "",
   });
   const rows = useMemo(() => calc(data[tab]), [data, tab]);
+  const fuelRows = useMemo(() => calc(data.fuel), [data.fuel]);
+  const defRows = useMemo(() => calc(data.def), [data.def]);
   useEffect(() => {
     if (!msal) return;
     let active = true;
@@ -711,6 +770,14 @@ function App() {
           <span className="syncStatus">{syncStatus}</span>
         </div>
       </header>
+      {screen === "calculator" ? (
+        <CostCalculator
+          fuelRows={fuelRows}
+          defRows={defRows}
+          onBack={() => setScreen("tracker")}
+        />
+      ) : (
+        <>
       <nav
         style={{ marginLeft: "auto", display: "flex", width: "max-content" }}
       >
@@ -725,6 +792,9 @@ function App() {
           onClick={() => setTab("def")}
         >
           DEF
+        </button>
+        <button type="button" onClick={() => setScreen("calculator")}>
+          Calculate cost
         </button>
       </nav>
       <Summary rows={rows} type={tab} />
@@ -834,6 +904,8 @@ function App() {
           : "Data is saved in this browser. Connect OneDrive for automatic sync."}{" "}
         Export a backup for an extra copy.
       </footer>
+        </>
+      )}
     </main>
   );
 }
