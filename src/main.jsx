@@ -116,6 +116,13 @@ function calc(rows) {
 function currentCostPerMile(rows) {
   return [...rows].reverse().find((row) => row.costMile > 0)?.costMile || 0;
 }
+function recentRows(rows, amount, unit = "days") {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  if (unit === "months") cutoff.setMonth(cutoff.getMonth() - amount);
+  else cutoff.setDate(cutoff.getDate() - amount);
+  return rows.filter((row) => new Date(`${row.date}T00:00:00`) >= cutoff);
+}
 function Summary({ rows, type }) {
   const totalMiles = rows.reduce((s, r) => s + r.distance, 0),
     gallons = rows.reduce((s, r) => s + r.gallons, 0),
@@ -143,10 +150,6 @@ function Summary({ rows, type }) {
             <span>Worst MPG</span>
             <b>{num(worst)}</b>
           </article>
-          <article>
-            <span>Fuel spend</span>
-            <b>{money.format(cost)}</b>
-          </article>
             <article>
               <span>Cost per mile</span>
               <b>{money.format(costPerMile)}</b>
@@ -167,10 +170,6 @@ function Summary({ rows, type }) {
             <b>{num(gallons, 2)}</b>
           </article>
           <article>
-            <span>Total cost</span>
-            <b>{money.format(cost)}</b>
-          </article>
-          <article>
             <span>Cost per mile</span>
             <b>{money.format(costPerMile)}</b>
           </article>
@@ -180,20 +179,14 @@ function Summary({ rows, type }) {
   );
 }
 function TrendChart({ rows, title, field, color, format, axisFormat = format }) {
-  const [zoom, setZoom] = useState(1),
-    [viewX, setViewX] = useState(0),
-    [viewY, setViewY] = useState(0),
-    [drag, setDrag] = useState(null),
-    [hover, setHover] = useState(null);
+  const [hover, setHover] = useState(null);
   const values = rows.map((r) => Number(r[field]) || 0),
     max = Math.max(...values, 1),
     min = Math.min(...values, 0),
     range = max - min || 1,
     width = 640,
     height = 220,
-    pad = { top: 18, right: 18, bottom: 34, left: 96 },
-    visibleWidth = width / zoom,
-    visibleHeight = height / zoom;
+    pad = { top: 18, right: 18, bottom: 34, left: 96 };
   const points = rows.map((r, i) => {
     const x =
       rows.length === 1
@@ -214,48 +207,6 @@ function TrendChart({ rows, title, field, color, format, axisFormat = format }) 
       points.length > 1
         ? `${pad.left},${height - pad.bottom} ${points.map((p) => `${p.x},${p.y}`).join(" ")} ${points.at(-1).x},${height - pad.bottom}`
         : "";
-  const setZoomLevel = (nextZoom) => {
-    const next = Math.max(1, Math.min(4, nextZoom));
-    setZoom(next);
-    setViewX(
-      Math.min(width - visibleWidth, Math.max(0, (width - width / next) / 2)),
-    );
-    setViewY(
-      Math.min(
-        height - visibleHeight,
-        Math.max(0, (height - height / next) / 2),
-      ),
-    );
-  };
-  const resetView = () => {
-    setZoom(1);
-    setViewX(0);
-    setViewY(0);
-  };
-  const pan = (e) => {
-    if (!drag) return;
-    const rect = e.currentTarget.getBoundingClientRect(),
-      scaleX = visibleWidth / rect.width,
-      scaleY = visibleHeight / rect.height;
-    setViewX(
-      Math.max(
-        0,
-        Math.min(
-          width - visibleWidth,
-          drag.viewX - (e.clientX - drag.x) * scaleX,
-        ),
-      ),
-    );
-    setViewY(
-      Math.max(
-        0,
-        Math.min(
-          height - visibleHeight,
-          drag.viewY - (e.clientY - drag.y) * scaleY,
-        ),
-      ),
-    );
-  };
   return (
     <article className="chart">
       <div className="chartHead">
@@ -263,52 +214,12 @@ function TrendChart({ rows, title, field, color, format, axisFormat = format }) 
           <h3>{title}</h3>
           <span>{rows.length ? "Per fill-up" : "No entries yet"}</span>
         </div>
-        {rows.length && (
-          <div style={{ display: "flex", gap: "6px" }}>
-            <button
-              className="button secondary"
-              style={{ padding: "5px 9px" }}
-              type="button"
-              onClick={() => setZoomLevel(zoom / 1.25)}
-              aria-label="Zoom out"
-            >
-              −
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "5px 9px" }}
-              type="button"
-              onClick={() => setZoomLevel(zoom * 1.25)}
-              aria-label="Zoom in"
-            >
-              +
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "5px 9px" }}
-              type="button"
-              onClick={resetView}
-            >
-              Reset
-            </button>
-          </div>
-        )}
       </div>
       {rows.length ? (
         <svg
-          viewBox={`${viewX} ${viewY} ${visibleWidth} ${visibleHeight}`}
+          viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={title}
-          style={{ cursor: zoom > 1 ? "grab" : "default", touchAction: "none" }}
-          onPointerDown={(e) => {
-            if (zoom > 1) {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setDrag({ x: e.clientX, y: e.clientY, viewX, viewY });
-            }
-          }}
-          onPointerMove={pan}
-          onPointerUp={() => setDrag(null)}
-          onPointerCancel={() => setDrag(null)}
         >
           <line
             className="axis"
@@ -414,12 +325,24 @@ function TrendChart({ rows, title, field, color, format, axisFormat = format }) 
     </article>
   );
 }
-function Trends({ rows, type }) {
+function Trends({
+  rows,
+  type,
+  onViewAll,
+  className = "",
+  periodLabel = "Lifetime",
+  efficiencyTitle,
+}) {
   return (
-    <section className="trends">
+    <section className={`trends ${className}`}>
       <TrendChart
         rows={rows}
-        title={type === "fuel" ? "MPG over time" : "DEF efficiency over time"}
+        title={
+          efficiencyTitle ||
+            (type === "fuel"
+              ? `MPG - ${periodLabel}`
+              : `DEF - MPG - ${periodLabel}`)
+        }
         field="efficiency"
         color="#4fd1a8"
         format={(v) => (type === "fuel" ? `${num(v)} MPG` : `${num(v)} mi/gal`)}
@@ -427,11 +350,20 @@ function Trends({ rows, type }) {
       />
       <TrendChart
         rows={rows}
-        title="Cost over time"
+        title={`Cost - ${periodLabel}`}
         field="cost"
         color="#f0b35b"
         format={(v) => money.format(v)}
       />
+      {onViewAll && (
+        <button
+          className="button secondary graphLink"
+          type="button"
+          onClick={onViewAll}
+        >
+          View full-size graphs
+        </button>
+      )}
     </section>
   );
 }
@@ -442,6 +374,8 @@ function CostCalculator({ fuelRows, defRows, onBack }) {
   const defCostPerMile = currentCostPerMile(defRows);
   const fuelCost = tripMiles * fuelCostPerMile;
   const combinedCost = tripMiles * (fuelCostPerMile + defCostPerMile);
+  const totalFuelSpend = fuelRows.reduce((sum, row) => sum + row.cost, 0);
+  const totalDefSpend = defRows.reduce((sum, row) => sum + row.cost, 0);
 
   return (
     <>
@@ -476,6 +410,27 @@ function CostCalculator({ fuelRows, defRows, onBack }) {
           <b>{money.format(combinedCost)}</b>
         </article>
       </div>
+      <div className="cards lifetimeSummary">
+        <article>
+          <span>Total Fuel Spend</span>
+          <b>{money.format(totalFuelSpend)}</b>
+        </article>
+        <article>
+          <span>Total DEF Spend</span>
+          <b>{money.format(totalDefSpend)}</b>
+        </article>
+      </div>
+      <section className="panel fullGraphs">
+        <h2>Lifetime graphs</h2>
+        <section className="graphGroup">
+          <h3>Fuel</h3>
+          <Trends rows={fuelRows} type="fuel" className="fullGraphTrends" />
+        </section>
+        <section className="graphGroup">
+          <h3>DEF</h3>
+          <Trends rows={defRows} type="def" className="fullGraphTrends" />
+        </section>
+      </section>
     </>
   );
 }
@@ -798,7 +753,19 @@ function App() {
         </button>
       </nav>
       <Summary rows={rows} type={tab} />
-      <Trends rows={rows} type={tab} />
+      <Trends
+        rows={
+          tab === "def"
+            ? recentRows(rows, 6, "months")
+            : recentRows(rows, 60)
+        }
+        type={tab}
+        onViewAll={() => setScreen("calculator")}
+        periodLabel={tab === "def" ? "Last 6 Months" : "Last 60 Days"}
+        efficiencyTitle={
+          tab === "def" ? "DEF - MPG - Last 6 Months" : undefined
+        }
+      />
       <section className="panel">
         <h2>Add {tab === "fuel" ? "fuel" : "DEF"} fill-up</h2>
         <form onSubmit={add}>
