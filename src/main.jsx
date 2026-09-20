@@ -412,11 +412,11 @@ function CostCalculator({ fuelRows, defRows, onBack }) {
       </div>
       <div className="cards lifetimeSummary">
         <article>
-          <span>Total Fuel Spend</span>
+          <span>Lifetime Fuel Spend</span>
           <b>{money.format(totalFuelSpend)}</b>
         </article>
         <article>
-          <span>Total DEF Spend</span>
+          <span>Lifetime DEF Spend</span>
           <b>{money.format(totalDefSpend)}</b>
         </article>
       </div>
@@ -753,19 +753,6 @@ function App() {
         </button>
       </nav>
       <Summary rows={rows} type={tab} />
-      <Trends
-        rows={
-          tab === "def"
-            ? recentRows(rows, 6, "months")
-            : recentRows(rows, 60)
-        }
-        type={tab}
-        onViewAll={() => setScreen("calculator")}
-        periodLabel={tab === "def" ? "Last 6 Months" : "Last 60 Days"}
-        efficiencyTitle={
-          tab === "def" ? "DEF - MPG - Last 6 Months" : undefined
-        }
-      />
       <section className="panel">
         <h2>Add {tab === "fuel" ? "fuel" : "DEF"} fill-up</h2>
         <form onSubmit={add}>
@@ -809,6 +796,19 @@ function App() {
         </form>
         {msg && <p className="message">{msg}</p>}
       </section>
+      <Trends
+        rows={
+          tab === "def"
+            ? recentRows(rows, 6, "months")
+            : recentRows(rows, 60)
+        }
+        type={tab}
+        onViewAll={() => setScreen("calculator")}
+        periodLabel={tab === "def" ? "Last 6 Months" : "Last 60 Days"}
+        efficiencyTitle={
+          tab === "def" ? "DEF - MPG - Last 6 Months" : undefined
+        }
+      />
       <section className="panel tablePanel">
         <div className="sectionHead">
           <h2>History</h2>
