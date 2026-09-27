@@ -659,6 +659,14 @@ function App() {
     entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const remove = (id) => {
+    const entry = data[tab].find((row) => row.id === id);
+    if (!entry) return;
+
+    const type = tab === "fuel" ? "Fuel" : "DEF";
+    if (!window.confirm(`Delete the ${type} entry from ${entry.date}? This cannot be undone.`)) {
+      return;
+    }
+
     if (editingId === id) cancelEdit();
     save({ ...data, [tab]: data[tab].filter((x) => x.id !== id) });
   };
