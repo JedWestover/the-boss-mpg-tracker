@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PublicClientApplication } from "@azure/msal-browser";
 import * as XLSX from "xlsx";
@@ -101,9 +101,9 @@ function calc(rows) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((r, i, all) => {
       const prev = all[i - 1];
-      const distance =
-        Number(r.distance) ||
-        (prev && r.odometer > prev.odometer ? r.odometer - prev.odometer : 0);
+      const odometerDistance =
+        prev && r.odometer > prev.odometer ? r.odometer - prev.odometer : 0;
+      const distance = odometerDistance || Number(r.distance) || 0;
       return {
         ...r,
         distance,
@@ -450,6 +450,8 @@ function App() {
     gallons: "",
     cost: "",
   });
+  const [editingId, setEditingId] = useState(null);
+  const entryFormRef = useRef(null);
   const rows = useMemo(() => calc(data[tab]), [data, tab]);
   const fuelRows = useMemo(() => calc(data.fuel), [data.fuel]);
   const defRows = useMemo(() => calc(data.def), [data.def]);
@@ -582,6 +584,16 @@ function App() {
       );
     }
   };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm((current) => ({
+      ...current,
+      odometer: "",
+      gallons: "",
+      cost: "",
+    }));
+    setMsg("");
+  };
   const add = (e) => {
     e.preventDefault();
     const odometer = +form.odometer,
@@ -589,33 +601,67 @@ function App() {
       cost = +form.cost;
     if (!form.date || odometer <= 0 || gallons <= 0 || cost < 0)
       return setMsg("Enter a valid date, odometer, gallons, and cost.");
-    const prev = rows.at(-1);
-    const distance =
-      prev && odometer > prev.odometer ? odometer - prev.odometer : 0;
-    save({
-      ...data,
-      [tab]: [
-        ...data[tab],
-        {
-          id: uid(),
-          type: tab,
-          date: form.date,
-          odometer,
-          gallons,
-          cost,
-          distance,
-        },
-      ],
-    });
+    if (editingId) {
+      const updatedRows = data[tab].map((row) =>
+        row.id === editingId
+          ? {
+              ...row,
+              date: form.date,
+              odometer,
+              gallons,
+              cost,
+              distance:
+                form.date === row.date && odometer === Number(row.odometer)
+                  ? row.distance
+                  : 0,
+            }
+          : row,
+      );
+      save({ ...data, [tab]: updatedRows });
+      setEditingId(null);
+      setMsg("Entry updated.");
+    } else {
+      const prev = rows.at(-1);
+      const distance =
+        prev && odometer > prev.odometer ? odometer - prev.odometer : 0;
+      save({
+        ...data,
+        [tab]: [
+          ...data[tab],
+          {
+            id: uid(),
+            type: tab,
+            date: form.date,
+            odometer,
+            gallons,
+            cost,
+            distance,
+          },
+        ],
+      });
+      setMsg(
+        distance
+          ? "Entry saved."
+          : "Entry saved. Add a later odometer reading to calculate distance.",
+      );
+    }
     setForm((f) => ({ ...f, odometer: "", gallons: "", cost: "" }));
-    setMsg(
-      distance
-        ? "Entry saved."
-        : "Entry saved. Add a later odometer reading to calculate distance.",
-    );
   };
-  const remove = (id) =>
+  const editEntry = (entry) => {
+    setEditingId(entry.id);
+    setForm({
+      date: entry.date,
+      odometer: String(entry.odometer),
+      gallons: String(entry.gallons),
+      cost: String(entry.cost),
+    });
+    setMsg("");
+    entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  const remove = (id) => {
+    if (editingId === id) cancelEdit();
     save({ ...data, [tab]: data[tab].filter((x) => x.id !== id) });
+  };
   const exportFile = () => {
     const wb = XLSX.utils.book_new();
     for (const t of ["fuel", "def"]) {
@@ -738,13 +784,19 @@ function App() {
       >
         <button
           className={tab === "fuel" ? "active" : ""}
-          onClick={() => setTab("fuel")}
+          onClick={() => {
+            if (editingId !== null) cancelEdit();
+            setTab("fuel");
+          }}
         >
           Fuel
         </button>
         <button
           className={tab === "def" ? "active" : ""}
-          onClick={() => setTab("def")}
+          onClick={() => {
+            if (editingId !== null) cancelEdit();
+            setTab("def");
+          }}
         >
           DEF
         </button>
@@ -754,8 +806,10 @@ function App() {
       </nav>
       <Summary rows={rows} type={tab} />
       <section className="panel">
-        <h2>Add {tab === "fuel" ? "fuel" : "DEF"} fill-up</h2>
-        <form onSubmit={add}>
+        <h2>
+          {editingId !== null ? "Edit" : "Add"} {tab === "fuel" ? "fuel" : "DEF"} fill-up
+        </h2>
+        <form ref={entryFormRef} onSubmit={add}>
           <label>
             Date
             <input
@@ -790,9 +844,24 @@ function App() {
               onChange={(e) => setForm({ ...form, cost: e.target.value })}
             />
           </label>
-          <button className="button" type="submit">
-            Save fill-up
-          </button>
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button className="button" type="submit">
+              {editingId !== null ? "Save changes" : "Save fill-up"}
+            </button>
+            {editingId !== null && (
+              <button className="button secondary" type="button" onClick={cancelEdit}>
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
         {msg && <p className="message">{msg}</p>}
       </section>
@@ -836,7 +905,7 @@ function App() {
                   <th>Cost</th>
                   <th>$/gal</th>
                   <th>{tab === "fuel" ? "MPG" : "Miles/DEF gal"}</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -850,13 +919,31 @@ function App() {
                     <td>{money.format(r.unitCost)}</td>
                     <td className="strong">{num(r.efficiency)}</td>
                     <td>
-                      <button
-                        className="delete"
-                        onClick={() => remove(r.id)}
-                        aria-label="Delete entry"
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 8,
+                        }}
                       >
-                        ×
-                      </button>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          style={{ padding: "7px 10px", fontSize: ".78rem" }}
+                          onClick={() => editEntry(r)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="delete"
+                          type="button"
+                          onClick={() => remove(r.id)}
+                          aria-label={`Delete ${tab === "fuel" ? "fuel" : "DEF"} entry from ${r.date}`}
+                        >
+                          ×
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
